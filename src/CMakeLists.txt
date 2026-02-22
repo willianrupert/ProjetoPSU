@@ -1,0 +1,12 @@
+SET(SOURCES screens/ui_Tela_inicial.c
+    screens/ui_Tela_dados.c
+    screens/ui_Tela_rede.c
+    screens/ui_tela_lab.c
+    screens/ui_tela_shutdown.c
+    ui.c
+    components/ui_comp_hook.c
+    ui_helpers.c
+    fonts/ui_font_Shutdown.c
+    fonts/ui_font_Symbols.c)
+
+add_library(ui ${SOURCES})

@@ -1,0 +1,135 @@
+substitutions:
+  name: "nobreak-smart-willian"
+
+esphome:
+  name: "nobreak-smart-willian"
+  friendly_name: "Nobreak Inteligente CIn"
+  # 1. Puxa TODOS os arquivos da pasta
+  includes:
+    - src
+    
+  # 2. A FLAG MÁGICA: Força o compilador C++ a enxergar dentro da pasta src
+  platformio_options:
+    build_flags:
+      - "-Isrc"
+      - "-D LV_FONT_MONTSERRAT_16=1"
+      - "-D LV_FONT_MONTSERRAT_24=1"
+      
+      # Widgets exigidos pelo SquareLine
+      - "-D LV_USE_DROPDOWN=1"
+      - "-D LV_USE_ROLLER=1"
+      - "-D LV_USE_KEYBOARD=1"
+      - "-D LV_USE_TEXTAREA=1"
+      - "-D LV_USE_SPINBOX=1"
+      
+      # A PEÇA QUE FALTAVA (Dependência do Teclado)
+      - "-D LV_USE_BTNMATRIX=1"
+
+
+  # 3. O Gatilho que liga o seu design na placa!
+  on_boot:
+    priority: -100 
+    then:
+      - lambda: |-
+          // Função nativa do SquareLine que dá vida à UI
+          ui_init();
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: "Sua_Rede_WiFi"
+  password: "Sua_Senha"
+
+ota:
+  - platform: esphome
+
+safe_mode:
+
+# --- HARDWARE DA GUITION 4.3 ---
+psram:
+  mode: octal
+  speed: 80MHz
+
+i2c:
+  - id: bus_a
+    sda: 19
+    scl: 20
+    scan: true
+
+# --- HUB SPI (Exigência arquitetural do driver MIPI) ---
+spi:
+  id: spi_hub
+  # Usando GPIOs livres do ESP32-S3 apenas para tipagem
+  clk_pin: GPIO4
+  mosi_pin: GPIO5
+
+# --- O NOVO DRIVER NATIVO DO ESPHOME ---
+display:
+  - platform: mipi_rgb
+    model: CUSTOM
+    init_sequence: []
+    id: display_guition
+    dimensions:
+      width: 480
+      height: 272
+      
+    # Pinos de controle (Os nomes corretos que o compilador pediu)
+    pclk_pin: GPIO7
+    de_pin: GPIO40
+    hsync_pin: GPIO39
+    vsync_pin: GPIO38
+    
+    # Timings ficam "soltos" aqui, sem o bloco 'timing:'
+    hsync_front_porch: 8
+    hsync_pulse_width: 4
+    hsync_back_porch: 43
+    vsync_front_porch: 8
+    vsync_pulse_width: 4
+    vsync_back_porch: 12
+    
+    # Barramento de dados
+    data_pins:
+      - GPIO45
+      - GPIO48
+      - GPIO47
+      - GPIO21
+      - GPIO14
+      - GPIO13
+      - GPIO12
+      - GPIO11
+      - GPIO10
+      - GPIO9
+      - GPIO3
+      - GPIO8
+      - GPIO18
+      - GPIO17
+      - GPIO16
+      - GPIO15
+
+touchscreen:
+  - platform: gt911
+    id: touch_guition
+    display: display_guition
+    i2c_id: bus_a 
+
+# --- INTERFACE GRÁFICA (LVGL) ---
+lvgl:
+  id: meu_lvgl
+  # O ESPHome agora pede apenas a lista de nomes diretos
+  displays: 
+    - display_guition
+  touchscreens:
+    - touch_guition
+  
+# --- CÉREBRO DAS ATUALIZAÇÕES (O Loop) ---
+# Este bloco substitui o "on_update". Ele vai rodar a cada 1 segundo.
+interval:
+  - interval: 1s
+    then:
+      - lambda: |-
+          // Aqui a mágica do C/C++ acontece!
+          // Como você exportou do SquareLine, os nomes CamelCase funcionam aqui.
+          // Exemplo: lv_label_set_text(ui_porcentagemBateria, "100%");

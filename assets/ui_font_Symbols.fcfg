@@ -1,0 +1,17 @@
+{
+  "codename": "Symbols",
+  "ttf_path": "/assets/fa-solid-900.ttf",
+  "bin_path": "/assets/ui_font_Symbols.bin",
+  "c_path": "/assets/ui_font_Symbols.c",
+  "cfg_path": "/assets/ui_font_Symbols.fcfg",
+  "size": 16,
+  "bpp": 4,
+  "letters": 0,
+  "ranges": [
+    "0x20-0x7E",
+    "   0xF000-0xF2E0"
+  ],
+  "symbols": "\\uF1EB,",
+  "customparams": "--no-compress --no-prefilter",
+  "uploaded": false
+}
