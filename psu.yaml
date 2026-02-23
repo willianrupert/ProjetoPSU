@@ -2,37 +2,26 @@ substitutions:
   name: "nobreak-smart-willian"
 
 esphome:
-  name: "nobreak-smart-willian"
-  friendly_name: "Nobreak Inteligente CIn"
-  # 1. Puxa TODOS os arquivos da pasta
+  name: ${name}
+  friendly_name: "Nobreak CIn-UFPE"
   includes:
     - src
-    
-  # 2. A FLAG MÁGICA: Força o compilador C++ a enxergar dentro da pasta src
   platformio_options:
     build_flags:
       - "-Isrc"
       - "-D LV_FONT_MONTSERRAT_16=1"
       - "-D LV_FONT_MONTSERRAT_24=1"
-      
-      # Widgets exigidos pelo SquareLine
       - "-D LV_USE_DROPDOWN=1"
       - "-D LV_USE_ROLLER=1"
       - "-D LV_USE_KEYBOARD=1"
       - "-D LV_USE_TEXTAREA=1"
       - "-D LV_USE_SPINBOX=1"
-      
-      # A PEÇA QUE FALTAVA (Dependência do Teclado)
       - "-D LV_USE_BTNMATRIX=1"
-
-
-  # 3. O Gatilho que liga o seu design na placa!
+      
   on_boot:
     priority: -100 
     then:
-      - lambda: |-
-          // Função nativa do SquareLine que dá vida à UI
-          ui_init();
+      - lambda: 'ui_init();'
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -43,12 +32,19 @@ wifi:
   ssid: "Sua_Rede_WiFi"
   password: "Sua_Senha"
 
+api:
+  encryption:
+    key: "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVoxMjM0NTY="
+
 ota:
   - platform: esphome
 
-safe_mode:
+logger:
+  level: INFO
 
-# --- HARDWARE DA GUITION 4.3 ---
+# ==========================================
+# HARDWARE BASE
+# ==========================================
 psram:
   mode: octal
   speed: 80MHz
@@ -58,15 +54,14 @@ i2c:
     sda: 19
     scl: 20
     scan: true
+    frequency: 400kHz
 
-# --- HUB SPI (Exigência arquitetural do driver MIPI) ---
 spi:
   id: spi_hub
-  # Usando GPIOs livres do ESP32-S3 apenas para tipagem
-  clk_pin: GPIO4
-  mosi_pin: GPIO5
+  # Jogando o SPI fantasma para pinos completamente livres
+  clk_pin: GPIO43
+  mosi_pin: GPIO44
 
-# --- O NOVO DRIVER NATIVO DO ESPHOME ---
 display:
   - platform: mipi_rgb
     model: CUSTOM
@@ -75,39 +70,17 @@ display:
     dimensions:
       width: 480
       height: 272
-      
-    # Pinos de controle (Os nomes corretos que o compilador pediu)
     pclk_pin: GPIO7
     de_pin: GPIO40
     hsync_pin: GPIO39
     vsync_pin: GPIO38
-    
-    # Timings ficam "soltos" aqui, sem o bloco 'timing:'
     hsync_front_porch: 8
     hsync_pulse_width: 4
     hsync_back_porch: 43
     vsync_front_porch: 8
     vsync_pulse_width: 4
     vsync_back_porch: 12
-    
-    # Barramento de dados
-    data_pins:
-      - GPIO45
-      - GPIO48
-      - GPIO47
-      - GPIO21
-      - GPIO14
-      - GPIO13
-      - GPIO12
-      - GPIO11
-      - GPIO10
-      - GPIO9
-      - GPIO3
-      - GPIO8
-      - GPIO18
-      - GPIO17
-      - GPIO16
-      - GPIO15
+    data_pins: [GPIO45, GPIO48, GPIO47, GPIO21, GPIO14, GPIO13, GPIO12, GPIO11, GPIO10, GPIO9, GPIO3, GPIO8, GPIO18, GPIO17, GPIO16, GPIO15]
 
 touchscreen:
   - platform: gt911
@@ -115,21 +88,455 @@ touchscreen:
     display: display_guition
     i2c_id: bus_a 
 
-# --- INTERFACE GRÁFICA (LVGL) ---
 lvgl:
   id: meu_lvgl
-  # O ESPHome agora pede apenas a lista de nomes diretos
   displays: 
     - display_guition
   touchscreens:
     - touch_guition
+
+# ==========================================
+# GLOBAIS DA MÁQUINA DE ESTADOS (FSM)
+# ==========================================
+globals:
+  - id: fsm_estado
+    type: int
+    initial_value: "0"
+
+  - id: countdown_bateria
+    type: int
+    initial_value: "30"
   
-# --- CÉREBRO DAS ATUALIZAÇÕES (O Loop) ---
-# Este bloco substitui o "on_update". Ele vai rodar a cada 1 segundo.
+  - id: capacidade_medida_wh
+    type: float
+    initial_value: "150.0" 
+    restore_value: true 
+
+  - id: benchmark_start_time
+    type: uint32_t
+    initial_value: "0"
+  - id: benchmark_start_energia
+    type: float
+    initial_value: "0.0"
+
+# ==========================================
+# ATUADORES DE HARDWARE E RELÉS
+# ==========================================
+switch:
+  - platform: gpio
+    pin: GPIO46
+    id: rele_entrada_220v
+    internal: true 
+    restore_mode: ALWAYS_OFF 
+    
+  - platform: gpio
+    pin: GPIO5
+    id: rele_central_12v
+    internal: true
+    restore_mode: ALWAYS_OFF
+    
+  - platform: gpio
+    pin: GPIO42 # <--- MUDANÇA AQUI (Era 14). Lembre de mudar o fio na placa!
+    id: rele_carregador
+    internal: true
+    restore_mode: ALWAYS_OFF 
+    
+  - platform: gpio
+    pin: GPIO2 
+    name: "Monitoramento (Saída 12V)"
+    id: rele_monitor
+    icon: "mdi:monitor"
+    restore_mode: RESTORE_DEFAULT_ON
+
+  - platform: template
+    name: "Iniciar Benchmark de Bateria"
+    id: trigger_benchmark
+    icon: "mdi:battery-clock"
+    turn_on_action:
+      - lambda: 'if(id(fsm_estado) != 5 && id(fsm_estado) != 6) id(fsm_estado) = 7;' 
+    turn_off_action:
+      - lambda: 'if(id(fsm_estado) == 7) id(fsm_estado) = 1;'
+
+output:
+  - platform: ledc
+    pin: GPIO41
+    id: pwm_fans
+    frequency: 25000 Hz
+
+ads1115:
+  - id: ads_hub
+    i2c_id: bus_a
+    address: 0x48
+
+# ==========================================
+# INTEGRAÇÃO HOME ASSISTANT
+# ==========================================
+binary_sensor:
+  - platform: status
+    name: "Status Conexão HA"
+    id: ha_conexao_status
+    internal: true
+  - platform: homeassistant
+    name: "Status do Servidor Proxmox"
+    entity_id: binary_sensor.meu_servidor_status
+    id: ha_status_servidor
+  - platform: gpio
+    pin:
+      number: GPIO0 
+      inverted: true
+      mode: INPUT_PULLUP
+    name: "Botão Físico Monitor"
+    internal: true
+    on_press:
+      - switch.toggle: rele_monitor
+  - platform: template
+    name: "Alarme: Shutdown Servidor"
+    id: alarme_shutdown_servidor
+    device_class: safety
+  - platform: template
+    name: "Alarme: Superaquecimento"
+    id: alerta_termico
+    device_class: heat
+
+text_sensor:
+  - platform: homeassistant
+    name: "Tipo de Internet Atual"
+    entity_id: sensor.tipo_de_internet
+    id: ha_tipo_internet
+  - platform: template
+    name: "Último Benchmark: Duração"
+    id: result_tempo_bench
+
+sensor:
+  - platform: homeassistant
+    name: "Dados Fibra (Mês)"
+    entity_id: sensor.uso_dados_fibra
+    id: ha_dados_fibra
+  - platform: homeassistant
+    name: "Dados 5G (Mês)"
+    entity_id: sensor.uso_dados_5g
+    id: ha_dados_5g
+  - platform: homeassistant
+    name: "Energia Casa Consumida (Mês)"
+    entity_id: sensor.energia_consumida_casa
+    id: ha_energia_casa
+  - platform: homeassistant
+    name: "Energia Solar Injetada (Mês)"
+    entity_id: sensor.energia_injetada_casa
+    id: ha_energia_solar
+
+  # SENSORES FÍSICOS (Passivos, alimentam a FSM)
+  - platform: dht
+    pin: GPIO6
+    model: DHT22
+    temperature:
+      id: temp_interna
+      on_value:
+        then:
+          - lambda: |-
+              // Controle PWM Térmico Nível NASA em C++
+              if (x < 32.0) id(pwm_fans).set_level(0.0);
+              else if (x >= 32.0 && x < 40.0) id(pwm_fans).set_level(0.5);
+              else id(pwm_fans).set_level(1.0);
+
+  # REDE AC
+  - platform: ads1115
+    multiplexer: A0_GND
+    id: tensao_rede
+    gain: 6.144 # Lê até 6.144V no pino físico
+    update_interval: 1s
+    filters:
+      - multiply: 100.0 
+
+  # BATERIA DC
+  - platform: ads1115
+    multiplexer: A1_GND
+    id: tensao_bateria
+    gain: 6.144 # Lê até 6.144V no pino físico
+    update_interval: 1s
+    filters:
+      - multiply: 11.0 
+      - median:
+          window_size: 5
+          send_every: 1
+          send_first_at: 1
+
+  # CONSUMO DE ENERGIA (SHUNT)
+  - platform: ads1115
+    multiplexer: A2_GND
+    id: consumo_watts
+    gain: 0.256 # Amplifica sinais minúsculos do Shunt (Lê até 0.256V)
+    update_interval: 1s
+    filters:
+      - multiply: 150.0
+      - sliding_window_moving_average:
+          window_size: 3
+          send_every: 1
+  - platform: integration
+    name: "Energia Histórica (Wh)"
+    sensor: consumo_watts
+    time_unit: h
+    id: energia_gasta_wh
+    internal: true
+
+  - platform: template
+    name: "Último Benchmark: Energia (Wh)"
+    id: result_energia_bench
+    unit_of_measurement: "Wh"
+
+  - platform: template
+    name: "Nível da Bateria"
+    id: bat_porcentagem
+    device_class: battery
+    state_class: measurement
+    unit_of_measurement: "%"
+    update_interval: 1s
+    lambda: |-
+      float v = id(tensao_bateria).state;
+      if (isnan(v)) return 0.0;
+      float pct = ((v - 33.0) / (42.0 - 33.0)) * 100.0;
+      if (pct > 100.0) return 100.0;
+      if (pct < 0.0) return 0.0;
+      return pct;
+
+# ==========================================
+# CÉREBRO: FSM E INTERFACE GRÁFICA (1Hz)
+# ==========================================
 interval:
   - interval: 1s
     then:
       - lambda: |-
-          // Aqui a mágica do C/C++ acontece!
-          // Como você exportou do SquareLine, os nomes CamelCase funcionam aqui.
-          // Exemplo: lv_label_set_text(ui_porcentagemBateria, "100%");
+          // 1. LEITURA SEGURA DE SENSORES
+          float v_bat = id(tensao_bateria).state;
+          float v_rede = id(tensao_rede).state;
+          float temp = id(temp_interna).state;
+          float consumo_w = id(consumo_watts).state;
+          if (isnan(consumo_w)) consumo_w = 0.0;
+
+          if (isnan(v_bat) || isnan(v_rede) || isnan(temp)) {
+            id(fsm_estado) = 0;
+            return; 
+          }
+
+          // 2. AVALIAÇÃO DE PRIORIDADE ABSOLUTA
+          if (temp >= 45.0 && id(fsm_estado) != 6) {
+              id(fsm_estado) = 6; 
+              id(countdown_bateria) = 30; 
+          } else if (v_bat <= 35.0 && id(fsm_estado) != 5 && id(fsm_estado) != 6 && id(fsm_estado) != 7) {
+              id(fsm_estado) = 5; 
+              id(countdown_bateria) = 30;
+          }
+
+          bool rede_ok = (v_rede < 5.0) || (v_rede >= 100.0 && v_rede <= 230.0);
+          bool blackout = (v_rede < 5.0);
+
+          // 3. MOTOR DA FSM
+          switch(id(fsm_estado)) {
+              case 0: 
+                  if (rede_ok && !blackout) id(fsm_estado) = 1;
+                  else id(fsm_estado) = 4;
+                  break;
+              case 1: 
+                  id(rele_entrada_220v).turn_off(); 
+                  id(rele_carregador).turn_off();
+                  id(rele_central_12v).turn_off();
+                  if (blackout) id(fsm_estado) = 4;
+                  else if (!rede_ok) { id(rele_entrada_220v).turn_on(); id(fsm_estado) = 4; } 
+                  else if (v_bat <= 38.5) id(fsm_estado) = 2;
+                  break;
+              case 2: 
+                  id(rele_entrada_220v).turn_off();
+                  id(rele_carregador).turn_on();
+                  if (blackout || !rede_ok) id(fsm_estado) = 4;
+                  else if (v_bat >= 41.5) id(fsm_estado) = 3;
+                  break;
+              case 3: 
+                  id(rele_carregador).turn_off();
+                  id(rele_entrada_220v).turn_on(); 
+                  if (v_bat <= 39.0) { id(rele_entrada_220v).turn_off(); id(fsm_estado) = 1; }
+                  break;
+              case 4: 
+                  id(rele_carregador).turn_off();
+                  if (blackout) id(rele_entrada_220v).turn_off();
+                  else if (!rede_ok) id(rele_entrada_220v).turn_on();
+                  if (rede_ok && !blackout) { id(rele_entrada_220v).turn_off(); id(fsm_estado) = 1; }
+                  break;
+              case 5: 
+                  id(alarme_shutdown_servidor).publish_state(true);
+                  if (id(countdown_bateria) > 0) id(countdown_bateria) -= 1;
+                  else id(rele_central_12v).turn_on(); 
+                  if (rede_ok && !blackout) { id(alarme_shutdown_servidor).publish_state(false); id(fsm_estado) = 1; }
+                  break;
+              case 6: 
+                  id(alerta_termico).publish_state(true);
+                  if (id(countdown_bateria) > 0) id(countdown_bateria) -= 1;
+                  else { id(rele_central_12v).turn_on(); id(rele_entrada_220v).turn_on(); }
+                  break;
+              case 7: 
+                  if (v_bat >= 41.5 && id(benchmark_start_time) == 0) {
+                      id(rele_carregador).turn_off();
+                      id(rele_entrada_220v).turn_on(); 
+                  } else if (v_bat <= 39.0 && id(benchmark_start_time) == 0) {
+                      id(benchmark_start_time) = millis();
+                      id(benchmark_start_energia) = id(energia_gasta_wh).state;
+                  } else if (v_bat <= 35.0 && id(benchmark_start_time) > 0) {
+                      uint32_t diff_ms = millis() - id(benchmark_start_time);
+                      int h = diff_ms / 3600000;
+                      int m = (diff_ms % 3600000) / 60000;
+                      char dur_buf[32];
+                      snprintf(dur_buf, sizeof(dur_buf), "%dh %dm", h, m);
+                      id(result_tempo_bench).publish_state(dur_buf);
+                      
+                      float energia_usada = id(energia_gasta_wh).state - id(benchmark_start_energia);
+                      id(result_energia_bench).publish_state(energia_usada);
+                      id(capacidade_medida_wh) = energia_usada; 
+                      
+                      id(trigger_benchmark).turn_off();
+                      id(benchmark_start_time) = 0; 
+                      id(fsm_estado) = 1; 
+                  } else {
+                      id(rele_carregador).turn_on();
+                  }
+                  break;
+          }
+
+          // 4. MUDANÇA DE TELAS (Emergências)
+          static int ultimo_estado_tela = -1;
+          if (id(fsm_estado) != ultimo_estado_tela) {
+              if (id(fsm_estado) == 5 || id(fsm_estado) == 6) {
+                  _ui_screen_change(&ui_tela_shutdown, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, &ui_tela_shutdown_screen_init);
+              } else if (ultimo_estado_tela == 5 || ultimo_estado_tela == 6) {
+                  _ui_screen_change(&ui_Tela_inicial, LV_SCR_LOAD_ANIM_FADE_ON, 300, 0, &ui_Tela_inicial_screen_init);
+              }
+              ultimo_estado_tela = id(fsm_estado);
+          }
+
+          // ==========================================
+          // 5. ATUALIZAÇÃO GLOBAL DAS 5 TELAS (LVGL)
+          // ==========================================
+          
+          // ---> Bateria (Tela Inicial e Tela Dados)
+          if (!isnan(v_bat)) {
+            char buf_v[16];
+            snprintf(buf_v, sizeof(buf_v), "%.1f V", v_bat);
+            lv_label_set_text(ui_tensaoDC, buf_v); 
+          }
+          if (!isnan(id(bat_porcentagem).state)) {
+            char buf_p[16];
+            snprintf(buf_p, sizeof(buf_p), "%.0f%%", id(bat_porcentagem).state);
+            lv_label_set_text(ui_porcentagemBateria, buf_p);
+            lv_label_set_text(ui_porcentagemBateria1, buf_p); // Tela de Dados
+            lv_bar_set_value(ui_barBateria, (int)id(bat_porcentagem).state, LV_ANIM_OFF); // Anima a barra visual
+          }
+
+          // ---> Rede AC e Cooler (Tela Dados)
+          if (!isnan(v_rede)) {
+            char buf_ac[16];
+            snprintf(buf_ac, sizeof(buf_ac), "%.0f V", v_rede);
+            lv_label_set_text(ui_tensaoAC, buf_ac);
+          }
+          if (!isnan(temp)) {
+            char buf_t[32];
+            snprintf(buf_t, sizeof(buf_t), "%.1f C", temp);
+            lv_label_set_text(ui_valoresTempH, buf_t);
+            
+            // PWM Texto
+            if (temp < 32.0) lv_label_set_text(ui_potenciaCooler, "0%");
+            else if (temp < 40.0) lv_label_set_text(ui_potenciaCooler, "50%");
+            else lv_label_set_text(ui_potenciaCooler, "100%");
+          }
+
+          // ---> Sincronização de Status Bar (Telas 1, 2, 3 e 4)
+          lv_color_t c_on = lv_color_hex(0xFFFFFF); // Branco
+          lv_color_t c_err = lv_color_hex(0xFF0000); // Vermelho
+
+          // Wi-Fi
+          lv_color_t c_wifi = id(ha_conexao_status).state ? c_on : c_err;
+          lv_obj_set_style_text_color(ui_estadoWiFi, c_wifi, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoWiFi2, c_wifi, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoWiFi3, c_wifi, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoWiFi4, c_wifi, LV_PART_MAIN);
+
+          // Servidor Proxmox
+          lv_color_t c_serv = id(ha_status_servidor).state ? c_on : c_err;
+          lv_obj_set_style_text_color(ui_estadoServidor, c_serv, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoServidor2, c_serv, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoServidor3, c_serv, LV_PART_MAIN);
+          lv_obj_set_style_text_color(ui_estadoServidor4, c_serv, LV_PART_MAIN);
+
+          // Texto 5G/FIBRA no Status Bar
+          if (id(ha_tipo_internet).has_state()) {
+              const char* txt_net = id(ha_tipo_internet).state.c_str();
+              lv_label_set_text(ui_estadoRede, txt_net);
+              lv_label_set_text(ui_estadoRede2, txt_net);
+              lv_label_set_text(ui_estadoRede3, txt_net);
+              lv_label_set_text(ui_estadoRede4, txt_net);
+          }
+
+          // ---> Tela Rede (Consumos HA)
+          if (id(ha_dados_fibra).has_state()) {
+              char buf_f[32];
+              snprintf(buf_f, sizeof(buf_f), "%.1f GB", id(ha_dados_fibra).state);
+              lv_label_set_text(ui_dadosFibra, buf_f);
+          }
+          if (id(ha_dados_5g).has_state()) {
+              char buf_5g[32];
+              snprintf(buf_5g, sizeof(buf_5g), "%.1f GB", id(ha_dados_5g).state);
+              lv_label_set_text(ui_valor5G, buf_5g);
+          }
+          if (id(ha_energia_solar).has_state()) {
+              char buf_sol[32];
+              snprintf(buf_sol, sizeof(buf_sol), "%.1f kWh", id(ha_energia_solar).state);
+              lv_label_set_text(ui_valorInjetada, buf_sol);
+          }
+          if (id(ha_energia_casa).has_state()) {
+              char buf_casa[32];
+              snprintf(buf_casa, sizeof(buf_casa), "%.1f kWh", id(ha_energia_casa).state);
+              lv_label_set_text(ui_valorConsumida, buf_casa);
+          }
+
+          // ---> Tela Lab (Benchmark Anterior)
+          if (id(result_tempo_bench).has_state() && id(result_energia_bench).has_state()) {
+              char buf_bench[64];
+              snprintf(buf_bench, sizeof(buf_bench), "%.1f Wh | %s", id(result_energia_bench).state, id(result_tempo_bench).state.c_str());
+              lv_label_set_text(ui_benchAnterior, buf_bench);
+          }
+
+          // ---> Tela Inicial e Tela Shutdown (A Mensagem Dinâmica Principal)
+          if (id(fsm_estado) == 6) {
+              lv_label_set_text(ui_sistemaCritico, "ALERTA TERMICO!"); // Texto tela vermelha
+              lv_label_set_text(ui_estadoNobreak, "ALERTA TERMICO!");
+          } 
+          else if (id(fsm_estado) == 5) {
+              char buf_corte[16];
+              snprintf(buf_corte, sizeof(buf_corte), "%d s", id(countdown_bateria));
+              lv_label_set_text(ui_temporizador, buf_corte); // Cronômetro na tela Vermelha
+              lv_label_set_text(ui_estadoNobreak, "SHUTDOWN!"); // Mantém na tela inicial escondida
+          }
+          else if (id(fsm_estado) == 7 && id(benchmark_start_time) == 0) {
+              // FSM 7: Preparação (Carregando a 100% ou caindo para 80%)
+              lv_label_set_text(ui_estadoNobreak, "PREP. BENCHMARK");
+          }
+          else if (id(fsm_estado) == 3 || id(fsm_estado) == 4 || (id(fsm_estado) == 7 && id(benchmark_start_time) > 0)) {
+              // USO DA BATERIA: Queda de Luz (4), Condicionamento (3) ou Medição do Benchmark (7)
+              float fracao = (v_bat - 35.0) / (39.0 - 35.0);
+              if (fracao > 1.0) fracao = 1.0; 
+              if (fracao < 0.0) fracao = 0.0;
+              
+              float energia_restante = id(capacidade_medida_wh) * fracao;
+              float divisor_potencia = (consumo_w > 1.0) ? consumo_w : 1.0; 
+              float hrs_restantes = energia_restante / divisor_potencia;
+              
+              int h = (int)hrs_restantes;
+              int m = (int)((hrs_restantes - h) * 60);
+              
+              char buf_dyn[64];
+              snprintf(buf_dyn, sizeof(buf_dyn), "%.0fW | %dh %02dm", consumo_w, h, m);
+              lv_label_set_text(ui_estadoNobreak, buf_dyn);
+          }
+          else if (id(fsm_estado) == 2) {
+              lv_label_set_text(ui_estadoNobreak, "CARREGANDO");
+          } 
+          else {
+              lv_label_set_text(ui_estadoNobreak, "REDE OK");
+          }
