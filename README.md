@@ -21,6 +21,22 @@ Para garantir que o travamento da interface gráfica nunca resulte na queima do 
 
 ---
 
+### Galeria de Interfaces (HMI)
+
+As telas abaixo são a representação visual direta dos vetores de estado da FSM, atualizadas em tempo real pelo loop secundário de UI.
+
+| Painel Principal (Status) | Telemetria Avançada |
+| :---: | :---: |
+| <img src="imagens_telas/tela_1.png" width="400"> | <img src="imagens_telas/tela_2.png" width="400"> |
+| *Visão geral do sistema, status da rede e autonomia dinâmica.* | *Monitoramento detalhado de tensões (AC/DC), temperatura e potência.* |
+
+| Rede & Integração HA | Lab & Benchmark | Shutdown Crítico |
+| :---: | :---: | :---: |
+| <img src="imagens_telas/tela_3.png" width="260"> | <img src="imagens_telas/tela_4.png" width="260"> | <img src="imagens_telas/tela_5.png" width="260"> |
+| *Dados de infraestrutura via API.* | *Calibração manual do BMS.* | *Estado terminal (FSM 5, 6 ou 8).* |
+
+---
+
 ## 🧮 Máquina de Estados Finita Determinística (FSM)
 
 A lógica central do nobreak não utiliza *scripts* baseados em eventos soltos ou *delays* bloqueantes. O núcleo de decisão é um **Autômato Finito Determinístico (DFA)** rigorosamente mapeado para resolver 16 combinações possíveis de ambiente (2⁴: Rede, Bateria, Temperatura e Lockout), reduzidas a **9 Estados Formais Mutuamente Exclusivos**. 
@@ -67,20 +83,6 @@ Diferente de sistemas comerciais que estimam a autonomia baseados em regras gen�
 O *frontend* utiliza a poderosa biblioteca C++ LVGL rodando sobre um barramento de dados paralelo de 16-bits via display MIPI RGB. 
 
 A interface é composta por 5 telas dinâmicas renderizadas a 60 FPS, sem comprometer o loop crítico de energia. As *Strings* na tela são montadas utilizando as funções da biblioteca padrão C que garantem segurança de memória (Memory Safety), evitando travamentos por *Buffer Overflow*. A barra de status superior reflete de forma síncrona, em todas as telas, o status criptografado do Home Assistant, alertando instantaneamente sobre falhas nos servidores locais.
-
-### Galeria de Interfaces (HMI)
-
-As telas abaixo são a representação visual direta dos vetores de estado da FSM, atualizadas em tempo real pelo loop secundário de UI.
-
-| Painel Principal (Status) | Telemetria Avançada |
-| :---: | :---: |
-| <img src="imagens_telas/tela_1.png" width="400"> | <img src="imagens_telas/tela_2.png" width="400"> |
-| *Visão geral do sistema, status da rede e autonomia dinâmica.* | *Monitoramento detalhado de tensões (AC/DC), temperatura e potência.* |
-
-| Rede & Integração HA | Lab & Benchmark | Shutdown Crítico |
-| :---: | :---: | :---: |
-| <img src="imagens_telas/tela_3.png" width="260"> | <img src="imagens_telas/tela_4.png" width="260"> | <img src="imagens_telas/tela_5.png" width="260"> |
-| *Dados de infraestrutura via API.* | *Calibração manual do BMS.* | *Estado terminal (FSM 5, 6 ou 8).* |
 
 ---
 
