@@ -12,7 +12,7 @@ Desenvolvido por **Willian Neves** (CIn - UFPE).
 
 ---
 
-## 🧠 Arquitetura de Tempo Real (Dual-Loop)
+## Arquitetura de Tempo Real (Dual-Loop)
 
 Para garantir que o travamento da interface gráfica nunca resulte na queima do hardware físico, o sistema abandona loops monolíticos em favor de uma **Arquitetura Dual-Loop Assíncrona**:
 
@@ -57,7 +57,7 @@ Transições baseadas em tempo (como o *shutdown* seguro) utilizam contagem de t
 
 ---
 
-## 🛡️ Tolerância a Falhas e Proteções de Hardware
+## Tolerância a Falhas e Proteções de Hardware
 
 O sistema foi desenhado considerando que o ambiente elétrico é caótico e que microcontroladores podem sofrer interferência eletromagnética (EMI).
 
@@ -69,7 +69,7 @@ O sistema foi desenhado considerando que o ambiente elétrico é caótico e que 
 
 ---
 
-## 🔋 Smart BMS e Autonomia Dinâmica de Alta Fidelidade
+## Smart BMS e Autonomia Dinâmica de Alta Fidelidade
 
 Diferente de sistemas comerciais que estimam a autonomia baseados em regras genéricas fixas ou divisores de tensão estáticos, este firmware possui um motor matemático de projeção baseada na realidade física.
 
@@ -78,9 +78,9 @@ Diferente de sistemas comerciais que estimam a autonomia baseados em regras gen�
 
 ---
 
-## 🖥️ UI/UX: Display Inteligente (SquareLine + LVGL)
+## UI/UX: Display Inteligente (SquareLine + LVGL)
 
-O *frontend* utiliza a poderosa biblioteca C++ LVGL rodando sobre um barramento de dados paralelo de 16-bits via display MIPI RGB. 
+O *frontend* utiliza a biblioteca C++ LVGL rodando sobre um barramento de dados paralelo de 16-bits via display MIPI RGB. 
 
 A interface é composta por 5 telas dinâmicas renderizadas a 60 FPS, sem comprometer o loop crítico de energia. As *Strings* na tela são montadas utilizando as funções da biblioteca padrão C que garantem segurança de memória (Memory Safety), evitando travamentos por *Buffer Overflow*. A barra de status superior reflete de forma síncrona, em todas as telas, o status criptografado do Home Assistant, alertando instantaneamente sobre falhas nos servidores locais.
 
