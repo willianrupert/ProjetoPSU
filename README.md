@@ -8,6 +8,8 @@
 
 Um sistema de gerenciamento de energia ininterrupta (UPS/Nobreak) de alto desempenho projetado para servidores domésticos e infraestrutura de rede (Proxmox/NAS). Desenvolvido no ecossistema ESP32-S3, este firmware transcende a automação amadora, aplicando rigorosos padrões de **Engenharia de Software de Missão Crítica** e arquitetura de **Tempo Real**.
 
+![Diagrama da PSU](imagens_telas/diagramaPSU.png)
+
 Desenvolvido por **Willian Neves** (CIn - UFPE).
 
 ---
